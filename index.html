@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bigger or Smaller?</title>
+<style>
+:root{--bg:#fff6dc;--ink:#2b2350;--card:#ffffff;--a:#ff7a59;--b:#3aa6ff;--ok:#2fbf71;--dot:#ffb703;--hl:#ff4d8d;--muted:#6b6490;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1d1840;--ink:#fff3d6;--card:#2b2559;--muted:#b9b2e6;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#1d1840;--ink:#fff3d6;--card:#2b2559;--muted:#b9b2e6;color-scheme:dark}
+html,body{margin:0;min-height:100%}
+body{background:var(--bg);color:var(--ink);font-family:"Baloo 2","Trebuchet MS","Comic Sans MS",system-ui,sans-serif;text-align:center;-webkit-tap-highlight-color:transparent}
+.wrap{max-width:560px;margin:0 auto;padding:14px 14px 24px;min-height:100vh;display:flex;flex-direction:column;gap:12px}
+.hidden{display:none!important}
+button{font:inherit;color:inherit;cursor:pointer;border:0}
+h1{font-size:2.6rem;margin:8px 0 0;line-height:1.05}
+.sub{color:var(--muted);font-size:1.15rem;margin:0}
+.big{background:var(--a);color:#fff;font-size:2rem;font-weight:800;padding:16px 44px;border-radius:999px;box-shadow:0 6px 0 rgba(0,0,0,.2);margin-top:10px}
+.big:active{transform:translateY(4px);box-shadow:0 2px 0 rgba(0,0,0,.2)}
+.top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.stars{display:flex;gap:2px;font-size:1.1rem;flex-wrap:wrap;justify-content:center}
+.stars span{opacity:.25;filter:grayscale(1)}.stars .g{opacity:1;filter:none}.stars .s{opacity:.8;filter:none}
+.icon{background:var(--card);border-radius:50%;width:44px;height:44px;font-size:1.3rem;box-shadow:0 3px 0 rgba(0,0,0,.15)}
+.prompt{font-size:2rem;font-weight:800;margin:6px 0 2px;line-height:1.1}
+.prompt b{padding:2px 14px;border-radius:14px;color:#fff;background:var(--b)}
+.prompt b.small{background:var(--a)}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;flex:1;align-content:center}
+.card{background:var(--card);border-radius:28px;padding:14px 8px 18px;box-shadow:0 8px 0 rgba(0,0,0,.15);display:flex;flex-direction:column;align-items:center;gap:10px;min-height:230px;justify-content:center;transition:transform .15s}
+.card:active{transform:scale(.97)}
+.num{font-size:6.5rem;font-weight:800;line-height:1;color:var(--b)}
+.card:nth-child(2) .num{color:var(--a)}
+.dots{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;width:min(160px,85%)}
+.dot{aspect-ratio:1;border-radius:50%;background:var(--dot);transition:transform .2s,background .2s}
+.dot.hl{background:var(--hl);transform:scale(1.25)}
+.card.right{outline:6px solid var(--ok);animation:pop .5s}
+.card.try{animation:shake .4s}
+@keyframes pop{50%{transform:scale(1.07)}}
+@keyframes shake{25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+.msg{min-height:2.2rem;font-size:1.4rem;font-weight:700;color:var(--ok)}
+.msg.hint{color:var(--hl)}
+.end .score{font-size:4rem;margin:10px 0}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media (max-width:380px){.num{font-size:5rem}.prompt{font-size:1.6rem}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<section id="start" class="hidden" style="margin-top:8vh">
+  <div style="font-size:4rem">🐻🔢🦊</div>
+  <h1>Bigger or Smaller?</h1>
+  <p class="sub">Count the dots. Pick the right number!</p>
+  <button class="big" id="play">Play</button>
+</section>
+
+<section id="game" class="hidden" style="display:flex;flex-direction:column;gap:12px;flex:1">
+  <div class="top">
+    <div style="display:flex;gap:6px"><button class="icon" id="sound" aria-label="Voice and sound effects on or off">🔊</button><button class="icon" id="music" aria-label="Music on or off">🎵</button></div>
+    <div class="stars" id="stars" aria-label="Progress"></div>
+    <button class="icon" id="again" aria-label="Hear it again">🗣️</button>
+  </div>
+  <div class="prompt" id="prompt"></div>
+  <div class="cards" id="cards"></div>
+  <div class="msg" id="msg"></div>
+</section>
+
+<section id="end" class="hidden end" style="margin-top:8vh">
+  <div style="font-size:4rem">🏆</div>
+  <h1>Great job!</h1>
+  <div class="score" id="score"></div>
+  <p class="sub" id="endtxt"></p>
+  <button class="big" id="replay">Play again</button>
+</section>
+
+</div>
+<script>
+(function(){
+var TOTAL=10, $=function(s){return document.querySelector(s)};
+var S={round:0,level:1,streak:0,miss:0,first:true,locked:true,sound:true,a:0,b:0,mode:'bigger',results:[]};
+var LV=[null,{max:5,diff:2},{max:10,diff:4},{max:10,diff:2},{max:10,diff:1}];
+
+var AC=null,mBus=null,sBus=null,musicOn=true,mTimer=null,nextT=0,mStep=0;
+var NB=null;
+var NOTE={C5:523.25,D5:587.33,E5:659.25,F5:698.46,G5:783.99,A5:880,B5:987.77,C6:1046.5};
+var MEL=['E5 - G5 E5 C6 - G5 -','D5 - G5 D5 B5 - G5 -','E5 - A5 E5 C6 - A5 E5','F5 - A5 F5 C6 A5 F5 -','C5 D5 E5 G5 E5 D5 C5 -','D5 E5 G5 B5 G5 E5 D5 -','E5 G5 A5 C6 A5 G5 E5 -','F5 A5 C6 A5 G5 F5 E5 -'].join(' ').split(' ').map(function(x){return NOTE[x]||0});
+var BASSR=[130.81,98,110,87.31];
+var ARP=[[261.63,329.63,392],[196,246.94,293.66],[220,261.63,329.63],[174.61,220,261.63]];
+function tick(t){var s=AC.createBufferSource();s.buffer=NB;var f=AC.createBiquadFilter();f.type='highpass';f.frequency.value=6000;var g=AC.createGain();g.gain.setValueAtTime(.05,t);g.gain.exponentialRampToValueAtTime(.0001,t+.05);s.connect(f);f.connect(g);g.connect(mBus);s.start(t);s.stop(t+.06)}
+function playStep(s,t){
+  var ci=Math.floor(s/8)%4,st=s%8,f=MEL[s];
+  if(f){tone(f,t,.45,'sine',.09,mBus);tone(f*2,t,.15,'sine',.025,mBus)}
+  if(st===0||st===4)tone(BASSR[ci]*2,t,.4,'triangle',.08,mBus);
+  if(st%2===1){tone(ARP[ci][[0,1,2,1][(st-1)/2]],t,.22,'sine',.035,mBus);if(NB)tick(t)}
+}
+function pop(k){if(!AC||!S.sound)return;tone(440*Math.pow(2,(k*2)/12),AC.currentTime+.01,.25,'triangle',.2,sBus)}
+function pickVoice(fun){
+  if(!fun)return null;
+  try{var vs=speechSynthesis.getVoices().filter(function(v){return /^en/i.test(v.lang)});
+    var pref=['Junior','Kathy','Superstar','Bubbles','Samantha','Karen','Google US English'];
+    for(var i=0;i<pref.length;i++){for(var j=0;j<vs.length;j++){if(vs[j].name.indexOf(pref[i])>-1)return vs[j]}}}catch(e){}
+  return null;
+}
+function initAudio(){
+  if(!AC){try{var C=window.AudioContext||window.webkitAudioContext;AC=new C();
+    mBus=AC.createGain();mBus.gain.value=.5;mBus.connect(AC.destination);
+    sBus=AC.createGain();sBus.gain.value=.9;sBus.connect(AC.destination);var nb=AC.createBuffer(1,2048,AC.sampleRate),d=nb.getChannelData(0);for(var i=0;i<2048;i++){d[i]=Math.random()*2-1}NB=nb}catch(e){AC=null}}
+  if(AC&&AC.state==='suspended'){try{AC.resume()}catch(e){}}
+}
+function tone(f,t,d,type,v,bus){
+  var o=AC.createOscillator(),g=AC.createGain();o.type=type;o.frequency.setValueAtTime(f,t);
+  g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(v,t+.02);g.gain.exponentialRampToValueAtTime(.0001,t+d);
+  o.connect(g);g.connect(bus);o.start(t);o.stop(t+d+.05);
+}
+function sched(){
+  if(!AC)return;
+  while(nextT<AC.currentTime+.4){
+    playStep(mStep%64,nextT);
+    
+    
+    nextT+=.24;mStep++;
+  }
+}
+function startMusic(){if(!AC||!musicOn||mTimer)return;nextT=AC.currentTime+.1;mTimer=setInterval(sched,100)}
+function stopMusic(){if(mTimer){clearInterval(mTimer);mTimer=null}}
+function sfxRight(){if(!AC||!S.sound)return;var t=AC.currentTime+.02;[523.25,659.25,783.99,1046.5,1318.5].forEach(function(f,i){tone(f,t+i*.08,.35,'triangle',.22,sBus)})}
+function sfxWrong(){if(!AC||!S.sound)return;var t=AC.currentTime+.02;tone(330,t,.25,'sine',.25,sBus);tone(262,t+.18,.35,'sine',.25,sBus)}
+
+function say(t,cb,fun){fun=fun||/count/i.test(t);
+  if(!S.sound||!window.speechSynthesis){if(cb)setTimeout(cb,600);return}
+  try{speechSynthesis.cancel();var u=new SpeechSynthesisUtterance(t);u.rate=fun?.8:.85;u.pitch=fun?1.7:1.15;var v=pickVoice(fun);if(v)u.voice=v;
+    if(cb)u.onend=cb;speechSynthesis.speak(u)}catch(e){if(cb)setTimeout(cb,600)}
+}
+function show(id){['start','game','end'].forEach(function(x){$('#'+x).classList.toggle('hidden',x!==id)});
+  if(id==='game')$('#game').style.display='flex'}
+function rnd(n){return 1+Math.floor(Math.random()*n)}
+
+function drawStars(){
+  var h='';for(var i=0;i<TOTAL;i++){var r=S.results[i];h+='<span class="'+(r===1?'g':r===0?'s':'')+'">⭐</span>'}
+  $('#stars').innerHTML=h}
+
+function newRound(){
+  if(S.round>=TOTAL)return finish();
+  var L=LV[S.level],a,b;
+  do{a=rnd(L.max);b=rnd(L.max)}while(Math.abs(a-b)<L.diff);
+  S.a=a;S.b=b;S.first=true;S.locked=false;
+  S.mode=Math.floor(S.round/3)%2===0?'bigger':'smaller';
+  var w=S.mode==='bigger'?'BIGGER':'SMALLER';
+  $('#prompt').innerHTML='Tap the <b class="'+(S.mode==='bigger'?'':'small')+'">'+w.toLowerCase()+'</b> number';
+  $('#msg').textContent='';$('#msg').className='msg';
+  var h='';[a,b].forEach(function(n,i){
+    h+='<button class="card" data-i="'+i+'" aria-label="'+n+'"><div class="num">'+n+'</div><div class="dots">';
+    for(var k=0;k<n;k++)h+='<div class="dot"></div>';h+='</div></button>'});
+  $('#cards').innerHTML=h;
+  drawStars();
+  say('Tap the '+S.mode+' number');
+}
+
+function correctN(){return S.mode==='bigger'?Math.max(S.a,S.b):Math.min(S.a,S.b)}
+
+function countCard(card,n,done){
+  var dots=card.querySelectorAll('.dot'),i=0;
+  (function step(){
+    if(i>=n){return done&&done()}
+    dots[i].classList.add('hl');
+    var k=++i;
+    pop(k);if(S.sound&&window.speechSynthesis){say(String(k)+'!',step,true)}else{setTimeout(step,450)}
+  })();
+}
+
+function pick(i){
+  if(S.locked)return;
+  var n=i===0?S.a:S.b,other=i===0?S.b:S.a,cards=document.querySelectorAll('.card'),c=cards[i];
+  if(n===correctN()){
+    S.locked=true;c.classList.add('right');sfxRight();
+    S.results[S.round]=S.first?1:0;
+    if(S.first){S.streak++;S.miss=0;if(S.streak>=3&&S.level<4){S.level++;S.streak=0}}
+    var word=S.mode==='bigger'?'bigger':'smaller';
+    $('#msg').textContent='Yes! '+n+' is '+word+' than '+other+'! 🎉';
+    drawStars();
+    say('Yes! '+n+' is '+word+' than '+other+'!',function(){setTimeout(function(){S.round++;newRound()},500)});
+  }else{
+    S.streak=0;S.miss++;S.first=false;S.locked=true;
+    if(S.miss>=2&&S.level>1){S.level--;S.miss=0}
+    sfxWrong();c.classList.add('try');setTimeout(function(){c.classList.remove('try')},450);
+    $('#msg').textContent='Let’s count together!';$('#msg').className='msg hint';
+    var d=cards[0].querySelectorAll('.dot,.hl');
+    cards.forEach(function(x){x.querySelectorAll('.dot').forEach(function(y){y.classList.remove('hl')})});
+    say('Let’s count!',function(){
+      countCard(cards[0],S.a,function(){
+        countCard(cards[1],S.b,function(){
+          cards.forEach(function(x){x.querySelectorAll('.dot').forEach(function(y){y.classList.remove('hl')})});
+          $('#msg').textContent='Now try again!';
+          say('Now try again. Tap the '+S.mode+' number.',function(){S.locked=false});
+        })})});
+  }
+}
+
+function finish(){
+  var g=S.results.filter(function(r){return r===1}).length;
+  show('end');
+  $('#score').textContent='⭐ '+g+' / '+TOTAL;
+  $('#endtxt').textContent=g>=8?'Number superstar!':g>=5?'Nice work, keep going!':'Practice makes strong brains!';
+  say('Great job! You got '+g+' stars!');
+}
+
+function start(){
+  S.round=0;S.level=1;S.streak=0;S.miss=0;S.results=[];
+  initAudio();startMusic();show('game');newRound();
+}
+
+$('#cards').addEventListener('click',function(e){var c=e.target.closest('.card');if(c)pick(+c.dataset.i)});
+$('#play').onclick=start;$('#replay').onclick=start;
+$('#again').onclick=function(){say('Tap the '+S.mode+' number')};
+$('#sound').onclick=function(){S.sound=!S.sound;this.textContent=S.sound?'🔊':'🔇';if(!S.sound&&window.speechSynthesis)try{speechSynthesis.cancel()}catch(e){}};
+$('#music').onclick=function(){musicOn=!musicOn;this.style.opacity=musicOn?1:.4;if(musicOn){initAudio();startMusic()}else{stopMusic()}};
+document.addEventListener('visibilitychange',function(){if(document.hidden){stopMusic()}else{startMusic()}});
+show('start');
+})();
+</script>
+</body>
+</html>
